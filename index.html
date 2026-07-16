@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+  <meta name="theme-color" content="#0b3524" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>יניב! — משחק הקלפים</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icon.svg" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ===== מסך פתיחה ===== -->
+  <section id="scr-home" class="screen active">
+    <div class="home-inner">
+      <div class="logo-fan" aria-hidden="true">
+        <div class="fan-card fc1"><span>7<i>♠</i></span></div>
+        <div class="fan-card fc2 red"><span>A<i>♥</i></span></div>
+        <div class="fan-card fc3"><span>★</span></div>
+      </div>
+      <h1 class="game-title">יניב!</h1>
+      <p class="game-sub">משחק הקלפים האהוב — בכיס שלך</p>
+
+      <div class="identity-row">
+        <button id="btn-avatar" class="avatar-btn" title="החלף דמות">😎</button>
+        <input id="inp-name" class="name-input" type="text" maxlength="12" placeholder="השם שלך" />
+      </div>
+
+      <div id="home-menu" class="home-menu">
+        <button class="menu-btn primary" data-panel="online">
+          <span class="mb-icon">📶</span>
+          <span class="mb-text"><b>אונליין עם חברים</b><small>כל אחד מהטלפון שלו — עם קוד חדר</small></span>
+        </button>
+        <button class="menu-btn" data-panel="bots">
+          <span class="mb-icon">🤖</span>
+          <span class="mb-text"><b>משחק נגד בוטים</b><small>אתה מול 1–3 יריבים ממוחשבים</small></span>
+        </button>
+        <button class="menu-btn" data-panel="hotseat">
+          <span class="mb-icon">📱</span>
+          <span class="mb-text"><b>באותו מכשיר</b><small>2–4 שחקנים מעבירים את הטלפון</small></span>
+        </button>
+        <button class="menu-btn ghost" id="btn-rules">
+          <span class="mb-icon">📖</span>
+          <span class="mb-text"><b>חוקי המשחק</b><small>איך משחקים יניב?</small></span>
+        </button>
+      </div>
+
+      <!-- הגדרות בוטים / אותו מכשיר -->
+      <div id="setup-panel" class="setup-panel" hidden>
+        <h2 id="setup-title">הגדרות משחק</h2>
+        <div class="opt-row" id="row-opponents">
+          <label>יריבים</label>
+          <div class="seg" data-key="nOpp">
+            <button data-v="1">1</button>
+            <button data-v="2" class="sel">2</button>
+            <button data-v="3">3</button>
+          </div>
+        </div>
+        <div class="opt-row" id="row-humans" hidden>
+          <label>שחקנים</label>
+          <div class="seg" data-key="nHum">
+            <button data-v="2" class="sel">2</button>
+            <button data-v="3">3</button>
+            <button data-v="4">4</button>
+          </div>
+        </div>
+        <div class="opt-row" id="row-diff">
+          <label>רמת קושי</label>
+          <div class="seg" data-key="diff">
+            <button data-v="easy">קלה</button>
+            <button data-v="med" class="sel">בינונית</button>
+            <button data-v="hard">קשה</button>
+          </div>
+        </div>
+        <div class="opt-row">
+          <label>משחק עד</label>
+          <div class="seg" data-key="target">
+            <button data-v="100" class="sel">100</button>
+            <button data-v="200">200</button>
+          </div>
+        </div>
+        <div class="opt-row">
+          <label>חוק ההצמדה</label>
+          <div class="seg" data-key="slap">
+            <button data-v="1" class="sel">פעיל</button>
+            <button data-v="0">כבוי</button>
+          </div>
+        </div>
+        <div class="setup-actions">
+          <button id="btn-start-local" class="btn-gold">התחל משחק 🎴</button>
+          <button class="btn-plain btn-back">חזרה</button>
+        </div>
+      </div>
+
+      <!-- אונליין -->
+      <div id="online-panel" class="setup-panel" hidden>
+        <h2>📶 אונליין עם חברים</h2>
+        <button id="btn-host" class="btn-gold">צור חדר חדש 🏠</button>
+        <div class="join-row">
+          <input id="inp-code" class="code-input" type="text" maxlength="4" placeholder="קוד" autocapitalize="characters" autocomplete="off" />
+          <button id="btn-join" class="btn-throw">הצטרף ←</button>
+        </div>
+        <p id="online-msg" class="online-msg"></p>
+        <button class="btn-plain btn-back">חזרה</button>
+      </div>
+
+      <p class="home-foot">משחק חינמי · בלי הרשמה · שמרו למסך הבית 📱</p>
+    </div>
+  </section>
+
+  <!-- ===== לובי חדר ===== -->
+  <section id="scr-lobby" class="screen">
+    <div class="home-inner">
+      <h2 class="lobby-title">🏠 חדר משחק</h2>
+      <div class="room-code-box">
+        <span>קוד החדר</span>
+        <div id="room-code" class="room-code">— — — —</div>
+        <button id="btn-share" class="btn-plain">שתף קישור 🔗</button>
+      </div>
+      <div id="lobby-players" class="lobby-players"></div>
+      <div id="lobby-host-opts" class="setup-panel lobby-opts" hidden>
+        <div class="opt-row">
+          <label>משחק עד</label>
+          <div class="seg" data-key="target">
+            <button data-v="100" class="sel">100</button>
+            <button data-v="200">200</button>
+          </div>
+        </div>
+        <div class="opt-row">
+          <label>חוק ההצמדה</label>
+          <div class="seg" data-key="slap">
+            <button data-v="1" class="sel">פעיל</button>
+            <button data-v="0">כבוי</button>
+          </div>
+        </div>
+        <button id="btn-add-bot" class="btn-plain">+ הוסף בוט 🤖</button>
+      </div>
+      <p id="lobby-msg" class="online-msg"></p>
+      <div class="setup-actions">
+        <button id="btn-start-online" class="btn-gold" hidden>התחל משחק 🎴</button>
+        <button id="btn-leave-lobby" class="btn-plain">עזוב חדר</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== מסך משחק ===== -->
+  <section id="scr-game" class="screen">
+    <header class="topbar">
+      <button id="btn-exit" class="tb-btn" title="יציאה">✕</button>
+      <div class="tb-mid">
+        <span id="tb-round">סיבוב 1</span>
+        <span class="tb-dot">·</span>
+        <span id="tb-target">עד 100</span>
+      </div>
+      <div class="tb-left">
+        <button id="btn-scores" class="tb-btn" title="טבלת ניקוד">🏆</button>
+        <button id="btn-sound" class="tb-btn" title="צליל">🔊</button>
+      </div>
+    </header>
+
+    <div id="opponents" class="opponents"></div>
+
+    <div class="table-area">
+      <div class="table-center">
+        <div class="deck-wrap">
+          <div id="deck" class="deck-stack">
+            <div class="card back"></div>
+            <div class="card back"></div>
+            <div class="card back top"></div>
+          </div>
+          <span id="deck-count" class="deck-count">54</span>
+          <span class="pile-label">קופה</span>
+        </div>
+        <div class="pile-wrap">
+          <div id="pile" class="pile-fan"></div>
+          <span class="pile-label">ערימה</span>
+        </div>
+      </div>
+      <div id="turn-banner" class="turn-banner"></div>
+    </div>
+
+    <footer class="me-area">
+      <div class="me-info">
+        <span id="me-name" class="me-name">😎 אתה</span>
+        <span id="me-sum" class="me-sum">סכום: 0</span>
+        <button id="btn-sort" class="sort-btn">מיין ↕</button>
+      </div>
+      <div id="hand" class="hand"></div>
+      <div class="actions">
+        <button id="btn-yaniv" class="btn-yaniv" disabled>יניב!</button>
+        <span id="act-hint" class="act-hint">בחר קלפים ולחץ על הקופה או על הערימה</span>
+        <button id="btn-slap" class="btn-slap" hidden>🖐 הצמד!</button>
+      </div>
+    </footer>
+
+    <!-- וילון העברת מכשיר -->
+    <div id="curtain" class="overlay" hidden>
+      <div class="curtain-box">
+        <div id="curtain-avatar" class="curtain-avatar">🤠</div>
+        <h2 id="curtain-title">התור של שחקן 2</h2>
+        <p>העבירו את המכשיר, ואז לחצו כדי לחשוף את הקלפים</p>
+        <button id="curtain-go" class="btn-gold">אני מוכן — הצג קלפים 👀</button>
+      </div>
+    </div>
+
+    <!-- סיום סיבוב -->
+    <div id="round-end" class="overlay" hidden>
+      <div class="panel">
+        <h2 id="re-title">סוף סיבוב</h2>
+        <div id="re-rows" class="re-rows"></div>
+        <button id="re-next" class="btn-gold">סיבוב הבא ←</button>
+        <p id="re-wait" class="online-msg" hidden>ממתינים למארח…</p>
+      </div>
+    </div>
+
+    <!-- סיום משחק -->
+    <div id="game-over" class="overlay" hidden>
+      <div class="panel go-panel">
+        <div id="go-avatar" class="go-avatar">😎</div>
+        <h2 id="go-title">אתה המנצח! 🏆</h2>
+        <div id="go-table" class="re-rows"></div>
+        <button id="go-again" class="btn-gold">סיום 🎴</button>
+      </div>
+    </div>
+
+    <!-- טבלת ניקוד -->
+    <div id="scores-ovl" class="overlay" hidden>
+      <div class="panel">
+        <h2>🏆 טבלת ניקוד</h2>
+        <div id="scores-rows" class="re-rows"></div>
+        <button id="scores-close" class="btn-plain">סגור</button>
+      </div>
+    </div>
+
+    <div id="splash" class="splash" hidden><span id="splash-text">יניב!</span></div>
+    <div id="toasts" class="toasts"></div>
+    <div id="confetti" class="confetti" hidden></div>
+  </section>
+
+  <!-- ניתוק -->
+  <div id="net-ovl" class="overlay" hidden>
+    <div class="panel go-panel">
+      <div class="go-avatar">📡</div>
+      <h2 id="net-title">החיבור נותק</h2>
+      <p id="net-msg" class="online-msg"></p>
+      <button id="net-home" class="btn-gold">חזרה לתפריט</button>
+    </div>
+  </div>
+
+  <!-- ===== חוקים ===== -->
+  <div id="rules-ovl" class="overlay" hidden>
+    <div class="panel rules-panel">
+      <h2>📖 חוקי יניב</h2>
+      <div class="rules-body">
+        <p><b>המטרה:</b> לסיים כל סיבוב עם כמה שפחות נקודות ביד, ולהישאר אחרונים מתחת לניקוד היעד.</p>
+        <p><b>ערכי קלפים:</b> אס = 1, קלפי מספר = ערכם, נסיך/מלכה/מלך = 10, ג'וקר = 0.</p>
+        <p><b>מהלך תור:</b> מסמנים קלף אחד, <b>זוג/שלישייה</b> (אותו ערך) או <b>רצף</b> (3+ קלפים עוקבים מאותה צורה, ג'וקר משלים חורים) — ואז לוחצים על <b>הקופה</b> (לזרוק ולמשוך קלף חדש) או על <b>קלף קצה בערימה</b> (לזרוק ולקחת אותו).</p>
+        <p><b>יניב:</b> אם בתחילת התור סכום היד שלכם 7 או פחות — כפתור היניב נדלק ואפשר להכריז ולסיים את הסיבוב. כולם חושפים קלפים.</p>
+        <p><b>אסף:</b> אם לשחקן אחר יש סכום נמוך או שווה — הוא מכריז "אסף!", המכריז חוטף את סכום ידו + 30 נקודות עונשין, והאוסף מקבל 0.</p>
+        <p><b>חוק ה-50:</b> שחקן שהניקוד שלו נוחת בדיוק על כפולה של 50 (50, 100...) — הניקוד נחתך בחצי! 🎉</p>
+        <p><b>הצמדה:</b> משכתם מהקופה קלף שזהה בערכו למה שזרקתם הרגע? יש 3 שניות להצמיד אותו לזריקה!</p>
+        <p><b>הדחה:</b> מי שעובר את ניקוד היעד — בחוץ. האחרון שנשאר מנצח! 🏆</p>
+      </div>
+      <button id="rules-close" class="btn-gold">הבנתי!</button>
+    </div>
+  </div>
+
+  <script src="vendor/peerjs.min.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>

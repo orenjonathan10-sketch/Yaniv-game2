@@ -1,0 +1,16 @@
+{
+  "name": "יניב! — משחק הקלפים",
+  "short_name": "יניב!",
+  "description": "משחק הקלפים יניב — נגד בוטים או עם חברים באותו מכשיר",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b3524",
+  "theme_color": "#0b3524",
+  "dir": "rtl",
+  "lang": "he",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

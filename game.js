@@ -507,19 +507,40 @@ const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const makeCode = () => Array.from({ length: 4 }, () => CODE_CHARS[rnd(CODE_CHARS.length)]).join('');
 const peerId = code => 'yaniv-heb-' + code;
 
+// שרת איתות משלנו (Render). כשה-host ריק — נופלים לענן הציבורי של PeerJS.
+const PEER_SERVER = { host: '', port: 443, path: '/ps', secure: true };
+
 function peerOpts() {
-  const m = location.search.match(/[?&]ps=([^&]+)/); // שרת מקומי לבדיקות: ?ps=host:port
+  const m = location.search.match(/[?&]ps=([^&]+)/); // עקיפה לבדיקות: ?ps=cloud או ?ps=host:port
   if (m) {
-    const [h, po] = decodeURIComponent(m[1]).split(':');
+    const v = decodeURIComponent(m[1]);
+    if (v === 'cloud') return { debug: 1 };
+    const [h, po] = v.split(':');
     return { host: h, port: +po || 9000, path: '/ps', secure: false, debug: 1 };
   }
+  if (PEER_SERVER.host) return { ...PEER_SERVER, debug: 1 };
   return { debug: 1 };
 }
 
-function hostRoom() {
+// Render (בתוכנית חינם) מרדים את השרת אחרי חוסר פעילות; ההתעוררות אורכת עד דקה.
+// מעירים אותו מראש כשנכנסים למסך האונליין, וממתינים לו לפני יצירת Peer.
+let peerWarm = false;
+async function warmPeerServer(msgEl) {
+  if (peerWarm || !PEER_SERVER.host || /[?&]ps=/.test(location.search)) return;
+  const url = 'https://' + PEER_SERVER.host + PEER_SERVER.path;
+  for (let i = 0; i < 15; i++) {
+    try { await fetch(url, { mode: 'no-cors', cache: 'no-store' }); peerWarm = true; return; } catch (e) {}
+    if (msgEl && i === 0) msgEl.textContent = 'מעיר את השרת… בפעם הראשונה זה יכול לקחת עד דקה';
+    await new Promise(r => setTimeout(r, 5000));
+  }
+}
+
+async function hostRoom() {
   cleanupNet();
   NET.role = 'host';
   NET.code = makeCode();
+  $('#online-msg').textContent = 'יוצר חדר…';
+  await warmPeerServer($('#online-msg'));
   $('#online-msg').textContent = 'יוצר חדר…';
   const peer = new Peer(peerId(NET.code), peerOpts());
   NET.peer = peer;
@@ -602,10 +623,12 @@ function startOnlineGame() {
   startGame({ players, target: LOBBY.target, slap: LOBBY.slap, diff: 'hard' });
 }
 
-function joinRoom(code) {
+async function joinRoom(code) {
   cleanupNet();
   NET.role = 'client';
   NET.code = code;
+  $('#online-msg').textContent = 'מתחבר לחדר ' + code + '…';
+  await warmPeerServer($('#online-msg'));
   $('#online-msg').textContent = 'מתחבר לחדר ' + code + '…';
   const peer = new Peer(peerOpts());
   NET.peer = peer;
@@ -1034,6 +1057,7 @@ document.querySelectorAll('#home-menu .menu-btn[data-panel]').forEach(btn => {
     if (panel === 'online') {
       $('#online-panel').hidden = false;
       $('#online-msg').textContent = '';
+      warmPeerServer(null); // מעירים את שרת האיתות מראש, ברקע
     } else {
       $('#setup-panel').hidden = false;
       $('#setup-title').textContent = panel === 'bots' ? '🤖 משחק נגד בוטים' : '📱 באותו מכשיר';

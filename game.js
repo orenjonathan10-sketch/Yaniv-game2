@@ -97,6 +97,7 @@ const BOT_POOL = [
 ];
 const AVATARS = ['😎', '🤠', '🦁', '🐼', '🐯', '🦊', '🐸', '🐰', '🦉', '🐨'];
 const YANIV_MAX = 7;
+const TURN_LIMIT = 30; // שניות לתור של שחקן אנושי
 
 let GAMEMODE = null; // 'bots' | 'hotseat' | 'online'
 const G = {
@@ -107,6 +108,7 @@ const G = {
   pending: null,
   over: false,
   slapFor: -1, slapCard: null, slapTimer: null, turnNo: 0,
+  turnTimer: null, turnDeadline: 0,
   results: null, winnerSeat: -1,
   fx: [], fxSeq: 0,
 };
@@ -133,6 +135,8 @@ function startGame(cfg) {
   });
   G.turnNo = 0;
   clearTimeout(G.slapTimer);
+  clearTimeout(G.turnTimer);
+  G.turnDeadline = 0;
   UI.lastFxSeq = 0; UI.lastRound = 0; UI.curtainFor = ''; UI.selected.clear();
   $('#tb-target').textContent = 'עד ' + G.target;
   showScreen('game');
@@ -167,8 +171,23 @@ function beginTurn() {
   G.pending = null;
   if (p.hand.length === 0) { declareYaniv(G.turn); return; } // יד ריקה = יניב אוטומטי
   G.phase = 'turn';
+  clearTimeout(G.turnTimer);
+  G.turnDeadline = 0;
+  if (!p.bot) { // מגבלת זמן לתור אנושי — בסופה נזרק אוטומטית הקלף הגבוה ביותר
+    G.turnDeadline = Date.now() + TURN_LIMIT * 1000;
+    G.turnTimer = setTimeout(() => forceMove(G.turn), TURN_LIMIT * 1000 + 200);
+  }
   sync();
   if (p.bot) botTurn(p).catch(console.error);
+}
+
+function forceMove(seat) {
+  if (G.phase !== 'turn' || G.turn !== seat || G.over) return;
+  const p = G.players[seat];
+  if (!p.hand.length) return;
+  const c = p.hand.reduce((a, b) => (val(b) > val(a) ? b : a));
+  fx('toast', { msg: `⏱ הזמן נגמר — ${p.name} זרק ${cardName(c)} אוטומטית` });
+  applyMove(seat, [c.id], 'deck');
 }
 
 /* פעולה משחקן (מקומי או מהרשת) */
@@ -196,6 +215,8 @@ function applyMove(seat, ids, src) {
     pileCard = throwEnds(topThrow()).find(c => c.id === src);
     if (!pileCard) return;
   }
+  clearTimeout(G.turnTimer);
+  G.turnDeadline = 0;
   p.hand = p.hand.filter(c => !cards.includes(c));
   G.pending = { cards: v.ordered, by: seat };
   fx('sound', { name: 'throw' });
@@ -271,11 +292,13 @@ function commitTurn() {
   G.phase = 'busy';
   sync();
   G.turn = nextActive(G.turn);
-  setTimeout(beginTurn, G.players[G.turn].bot ? 250 : 450);
+  setTimeout(beginTurn, G.players[G.turn].bot ? 800 : 450);
 }
 
 /* ---------- יניב / אסף / ניקוד ---------- */
 async function declareYaniv(caller) {
+  clearTimeout(G.turnTimer);
+  G.turnDeadline = 0;
   G.phase = 'reveal';
   const cp = G.players[caller];
   const cSum = handSum(cp.hand);
@@ -340,7 +363,7 @@ async function declareYaniv(caller) {
 
 /* ---------- בוטים ---------- */
 async function botTurn(p) {
-  await sleep(900 + rnd(500));
+  await sleep(1700 + rnd(900));
   if (G.over || G.players[G.turn] !== p || G.phase !== 'turn') return;
   const s = handSum(p.hand);
   if (s <= YANIV_MAX && botCallsYaniv(p, s)) { declareYaniv(G.turn); return; }
@@ -351,7 +374,7 @@ async function botTurn(p) {
   fx('sound', { name: 'throw' });
   fx('toast', { msg: `${p.name} זרק ${describeCards(combo.ordered)}` });
   sync();
-  await sleep(950);
+  await sleep(1400);
 
   const pick = botDrawChoice(p, topThrow());
   let drawn, fromDeck = false;
@@ -369,14 +392,14 @@ async function botTurn(p) {
   sync();
 
   if (G.slap && fromDeck && drawn && canSlap(drawn, G.pending) && botSlaps()) {
-    await sleep(500);
+    await sleep(800);
     p.hand.splice(p.hand.indexOf(drawn), 1);
     G.pending.cards.push(drawn);
     fx('sound', { name: 'slap' });
     fx('toast', { msg: `${p.name} הצמיד ${cardName(drawn)}! 🖐` });
     sync();
   }
-  await sleep(450);
+  await sleep(700);
   commitTurn();
 }
 
@@ -472,6 +495,7 @@ function buildView(seat) {
     ends: throwEnds(topThrow()).map(c => c.id),
     hand: p.hand.map(pub), sum,
     canYaniv: G.phase === 'turn' && G.turn === seat && sum <= YANIV_MAX,
+    turnLeft: (G.phase === 'turn' && G.turnDeadline) ? Math.max(0, Math.ceil((G.turnDeadline - Date.now()) / 1000)) : null,
     slap: (G.phase === 'slap' && G.slapFor === seat && G.slapCard) ? pub(G.slapCard) : null,
     results: (G.phase === 'roundEnd' || G.phase === 'over') ? G.results : null,
     winnerSeat: G.winnerSeat,
@@ -748,7 +772,7 @@ function renderLobbyList(players, you) {
 /* ============================================================
    UI — תצוגה מונחית VIEW (זהה מקומית וברשת)
    ============================================================ */
-const UI = { view: null, selected: new Set(), lastFxSeq: 0, lastRound: 0, curtainFor: '', slapTicker: null };
+const UI = { view: null, selected: new Set(), lastFxSeq: 0, lastRound: 0, curtainFor: '', slapTicker: null, lastPileSig: '', bannerBase: '', turnDeadline: 0 };
 
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -762,6 +786,9 @@ function applyView(v) {
   }
   const ids = new Set(v.hand.map(c => c.id));
   for (const id of [...UI.selected]) if (!ids.has(id)) UI.selected.delete(id);
+
+  // טיימר תור — נספר מקומית מהרגע שהגיע העדכון
+  UI.turnDeadline = (v.phase === 'turn' && v.turnLeft != null) ? Date.now() + v.turnLeft * 1000 : 0;
 
   // וילון העברת מכשיר (באותו מכשיר בלבד)
   if (GAMEMODE === 'hotseat' && v.phase === 'turn' && !v.players[v.turn].bot && !v.players[v.turn].out) {
@@ -848,21 +875,26 @@ function renderGame(v, dealAnim = false) {
     }
     pileEl.appendChild(el);
   };
+  // אנימציית כניסה רק כשהערימה באמת השתנתה — לא בכל רינדור (למשל בחירת קלף)
+  const pileSig = (v.pendingCards ? 'p:' + v.pendingCards.map(c => c.id).join(',') + '|' : '') + v.top.map(c => c.id).join(',');
+  const pileChanged = pileSig !== UI.lastPileSig;
+  UI.lastPileSig = pileSig;
   if (v.pendingCards) {
     for (const c of v.top) addPileCard(c, { under: true });
-    v.pendingCards.forEach((c, i) => addPileCard(c, { fresh: true, sep: i === 0 && v.top.length > 0 }));
+    v.pendingCards.forEach((c, i) => addPileCard(c, { fresh: pileChanged, sep: i === 0 && v.top.length > 0 }));
   } else {
-    for (const c of v.top) addPileCard(c, { fresh: true, drawable: myTurn && !curtainUp && v.ends.includes(c.id) });
+    for (const c of v.top) addPileCard(c, { fresh: pileChanged, drawable: myTurn && !curtainUp && v.ends.includes(c.id) });
   }
 
   /* באנר תור */
   const cur = v.players[v.turn];
-  $('#turn-banner').textContent =
+  UI.bannerBase =
     v.over ? '' :
     v.phase === 'reveal' ? 'חושפים קלפים…' :
     v.phase === 'slap' ? (v.slap ? 'הזדמנות להצמדה!' : 'ממתינים להצמדה…') :
     myTurn ? 'התור שלך!' :
     v.phase === 'turn' || v.phase === 'busy' ? `התור של ${cur.avatar} ${cur.name}…` : '';
+  $('#turn-banner').textContent = UI.bannerBase + turnTimerSuffix();
 
   /* היד שלי */
   const meP = v.players[v.seat];
@@ -880,7 +912,7 @@ function renderGame(v, dealAnim = false) {
     if (dealAnim && !curtainUp) { el.classList.add('dealt'); el.style.animationDelay = (idx * 60) + 'ms'; }
     if (UI.selected.has(c.id)) el.classList.add('sel');
     el.addEventListener('click', () => {
-      if (!myTurn) return;
+      if (curtainUp) return; // מותר לבחור קלפים גם כשלא תורך — לתכנון מראש
       if (UI.selected.has(c.id)) UI.selected.delete(c.id); else UI.selected.add(c.id);
       snd.select();
       renderGame(UI.view);
@@ -901,10 +933,23 @@ function renderGame(v, dealAnim = false) {
     slapBtn.hidden = true;
     stopSlapTicker();
     hint.hidden = false;
-    hint.textContent = !myTurn ? '' :
-      UI.selected.size ? selHint(v) : 'בחר קלפים ולחץ על הקופה או על הערימה';
+    hint.textContent = myTurn
+      ? (UI.selected.size ? selHint(v) : 'בחר קלפים ולחץ על הקופה או על הערימה')
+      : (UI.selected.size ? '✔ הקלפים נבחרו — ייזרקו בתורך' : '');
   }
 }
+
+/* טיימר תור — עדכון הספירה בבאנר פעם בשנייה */
+function turnTimerSuffix() {
+  if (!UI.turnDeadline) return '';
+  const left = Math.ceil((UI.turnDeadline - Date.now()) / 1000);
+  return left > 0 ? ` · ⏱ ${left}` : '';
+}
+setInterval(() => {
+  if (!UI.turnDeadline) return;
+  const el = $('#turn-banner');
+  if (el) el.textContent = UI.bannerBase + turnTimerSuffix();
+}, 1000);
 
 function selHint(v) {
   const sel = v.hand.filter(c => UI.selected.has(c.id));

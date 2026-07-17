@@ -30,7 +30,7 @@ html, body { height: 100%; }
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Heebo", "Arial Hebrew", Arial, sans-serif;
-  background: var(--sea);
+  background: var(--sand2);
   color: #fff;
   overflow: hidden;
   user-select: none;
@@ -47,9 +47,9 @@ body {
   background:
     radial-gradient(circle at 80% 8%, rgba(255, 244, 180, .95) 0 34px, rgba(255, 244, 180, .35) 52px, transparent 86px),
     linear-gradient(180deg,
-      var(--sky1) 0%, var(--sky2) 46%, #b9e6fa 58%,
-      var(--sea) 60%, #2f9fd0 65%, #cdeef7 67.5%,
-      #f0e0b4 71%, var(--sand1) 80%, var(--sand2) 100%);
+      var(--sky1) 0%, var(--sky2) 46%, #bde7fa 58%,
+      #55b6dd 63%, var(--sea) 67%, #64bedb 71%,
+      #ecdcae 76%, var(--sand1) 84%, var(--sand2) 100%);
 }
 .screen.active { display: flex; }
 
@@ -593,15 +593,18 @@ button { font-family: inherit; cursor: pointer; border: none; }
 .online-msg { text-align: center; font-size: 13.5px; color: #ffe08a; min-height: 18px; text-shadow: 0 1px 3px rgba(60, 40, 10, .5); }
 .online-msg:empty { display: none; }
 
+#scr-lobby { align-items: center; justify-content: center; overflow-y: auto; }
+#scr-lobby .setup-actions { width: 100%; padding: 0 18px; margin-top: 4px; }
 .lobby-title {
-  color: var(--sun); font-size: 26px; margin-bottom: 14px;
-  -webkit-text-stroke: 1.5px #12628f;
+  color: var(--sun); font-size: 24px; margin-bottom: 14px;
+  -webkit-text-stroke: 1px #12628f;
   text-shadow: 0 2px 0 var(--sun-deep), 0 6px 18px rgba(10, 60, 100, .4);
 }
 .room-code-box {
   display: flex; flex-direction: column; align-items: center; gap: 7px;
+  width: calc(100% - 36px);
   background: var(--teal-bar); border: 1px dashed rgba(255, 216, 61, .6);
-  border-radius: 18px; padding: 14px 30px; margin-bottom: 16px;
+  border-radius: 18px; padding: 14px 30px; margin-bottom: 14px;
   box-shadow: 0 8px 22px rgba(10, 40, 60, .3);
 }
 .room-code-box > span { font-size: 12.5px; color: #9fc9db; }

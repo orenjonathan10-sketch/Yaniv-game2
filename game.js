@@ -292,7 +292,7 @@ function commitTurn() {
   G.phase = 'busy';
   sync();
   G.turn = nextActive(G.turn);
-  setTimeout(beginTurn, G.players[G.turn].bot ? 800 : 450);
+  setTimeout(beginTurn, G.players[G.turn].bot ? 550 : 450);
 }
 
 /* ---------- יניב / אסף / ניקוד ---------- */
@@ -363,7 +363,7 @@ async function declareYaniv(caller) {
 
 /* ---------- בוטים ---------- */
 async function botTurn(p) {
-  await sleep(1700 + rnd(900));
+  await sleep(1100 + rnd(500));
   if (G.over || G.players[G.turn] !== p || G.phase !== 'turn') return;
   const s = handSum(p.hand);
   if (s <= YANIV_MAX && botCallsYaniv(p, s)) { declareYaniv(G.turn); return; }
@@ -374,7 +374,7 @@ async function botTurn(p) {
   fx('sound', { name: 'throw' });
   fx('toast', { msg: `${p.name} זרק ${describeCards(combo.ordered)}` });
   sync();
-  await sleep(1400);
+  await sleep(950);
 
   const pick = botDrawChoice(p, topThrow());
   let drawn, fromDeck = false;
@@ -392,14 +392,14 @@ async function botTurn(p) {
   sync();
 
   if (G.slap && fromDeck && drawn && canSlap(drawn, G.pending) && botSlaps()) {
-    await sleep(800);
+    await sleep(600);
     p.hand.splice(p.hand.indexOf(drawn), 1);
     G.pending.cards.push(drawn);
     fx('sound', { name: 'slap' });
     fx('toast', { msg: `${p.name} הצמיד ${cardName(drawn)}! 🖐` });
     sync();
   }
-  await sleep(700);
+  await sleep(500);
   commitTurn();
 }
 

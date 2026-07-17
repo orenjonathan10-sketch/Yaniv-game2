@@ -534,16 +534,29 @@ const peerId = code => 'yaniv-heb-' + code;
 // שרת איתות משלנו (Render). כשה-host ריק — נופלים לענן הציבורי של PeerJS.
 const PEER_SERVER = { host: 'yaniv-peer.onrender.com', port: 443, path: '/ps', secure: true };
 
+// STUN + TURN: בלי TURN, חיבור בין שתי רשתות סלולריות (CGNAT) נכשל ברוב המקרים.
+// Open Relay הוא שירות TURN ציבורי חינמי.
+const ICE = {
+  iceServers: [
+    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+    {
+      urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443', 'turn:openrelay.metered.ca:443?transport=tcp'],
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
+  ],
+};
+
 function peerOpts() {
   const m = location.search.match(/[?&]ps=([^&]+)/); // עקיפה לבדיקות: ?ps=cloud או ?ps=host:port
   if (m) {
     const v = decodeURIComponent(m[1]);
-    if (v === 'cloud') return { debug: 1 };
+    if (v === 'cloud') return { debug: 1, config: ICE };
     const [h, po] = v.split(':');
-    return { host: h, port: +po || 9000, path: '/ps', secure: false, debug: 1 };
+    return { host: h, port: +po || 9000, path: '/ps', secure: false, debug: 1, config: ICE };
   }
-  if (PEER_SERVER.host) return { ...PEER_SERVER, debug: 1 };
-  return { debug: 1 };
+  if (PEER_SERVER.host) return { ...PEER_SERVER, debug: 1, config: ICE };
+  return { debug: 1, config: ICE };
 }
 
 // Render (בתוכנית חינם) מרדים את השרת אחרי חוסר פעילות; ההתעוררות אורכת עד דקה.

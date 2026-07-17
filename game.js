@@ -663,6 +663,14 @@ function startOnlineGame() {
   startGame({ players, target: LOBBY.target, slap: LOBBY.slap, diff: 'hard' });
 }
 
+// מצב חיבור ה-WebRTC — לאבחון תקלות (failed = בעיית NAT/ממסר)
+const iceInfo = conn => {
+  try {
+    const s = conn && conn.peerConnection && conn.peerConnection.iceConnectionState;
+    return s ? ` (ice: ${s})` : '';
+  } catch (e) { return ''; }
+};
+
 async function joinRoom(code) {
   cleanupNet();
   NET.role = 'client';
@@ -676,7 +684,13 @@ async function joinRoom(code) {
   peer.on('open', () => {
     const conn = peer.connect(peerId(code), { reliable: true });
     NET.conn = conn;
-    conn.on('open', () => { conn.send({ t: 'hello', name: myName(), avatar: myAvatar() }); });
+    // אם תוך 25 שניות לא נפתח ערוץ למארח — מדווחים עם מצב ה-ICE במקום להיתקע
+    const joinTimer = setTimeout(() => {
+      if (!joined && NET.conn === conn && !conn.open) {
+        netLost('לא הצלחנו להתחבר למארח' + iceInfo(conn));
+      }
+    }, 25000);
+    conn.on('open', () => { clearTimeout(joinTimer); conn.send({ t: 'hello', name: myName(), avatar: myAvatar() }); });
     conn.on('data', msg => {
       if (!msg || typeof msg !== 'object') return;
       if (msg.t === 'lobby') {
@@ -696,8 +710,8 @@ async function joinRoom(code) {
         netLost('המארח סגר את החדר');
       }
     });
-    conn.on('close', () => { if (joined) netLost('החיבור למארח נותק'); else $('#online-msg').textContent = 'חדר לא נמצא — בדקו את הקוד'; });
-    conn.on('error', () => netLost('שגיאת חיבור'));
+    conn.on('close', () => { if (joined) netLost('החיבור למארח נותק'); else $('#online-msg').textContent = 'החיבור למארח נסגר' + iceInfo(conn) + ' — נסו שוב'; });
+    conn.on('error', e => netLost('שגיאת חיבור: ' + ((e && e.type) || '') + iceInfo(conn)));
   });
   peer.on('error', e => {
     if (e.type === 'peer-unavailable') $('#online-msg').textContent = 'חדר ' + code + ' לא נמצא — בדקו את הקוד';

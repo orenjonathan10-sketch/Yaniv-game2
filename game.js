@@ -534,29 +534,31 @@ const peerId = code => 'yaniv-heb-' + code;
 // שרת איתות משלנו (Render). כשה-host ריק — נופלים לענן הציבורי של PeerJS.
 const PEER_SERVER = { host: 'yaniv-peer.onrender.com', port: 443, path: '/ps', secure: true };
 
-// STUN + TURN: בלי TURN, חיבור בין שתי רשתות סלולריות (CGNAT) נכשל ברוב המקרים.
-// Open Relay הוא שירות TURN ציבורי חינמי.
-const ICE = {
-  iceServers: [
-    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
-    {
-      urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443', 'turn:openrelay.metered.ca:443?transport=tcp'],
-      username: 'openrelayproject',
-      credential: 'openrelayproject',
-    },
-  ],
-};
+// STUN בסיסי כגיבוי; פרטי TURN אמיתיים (Cloudflare) נמשכים מהשרת ב-/turn.
+// בלי TURN, חיבור בין רשתות סלולריות/VPN (CGNAT) נכשל ברוב המקרים.
+const ICE = { iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }] };
+let iceConfig = null;
+async function fetchIce() {
+  if (iceConfig || !PEER_SERVER.host) return;
+  try {
+    const r = await fetch('https://' + PEER_SERVER.host + '/turn', { cache: 'no-store' });
+    if (r.ok) {
+      const d = await r.json();
+      if (d && d.iceServers) iceConfig = { iceServers: [].concat(d.iceServers) };
+    }
+  } catch (e) {}
+}
 
 function peerOpts() {
   const m = location.search.match(/[?&]ps=([^&]+)/); // עקיפה לבדיקות: ?ps=cloud או ?ps=host:port
   if (m) {
     const v = decodeURIComponent(m[1]);
-    if (v === 'cloud') return { debug: 1, config: ICE };
+    if (v === 'cloud') return { debug: 1, config: iceConfig || ICE };
     const [h, po] = v.split(':');
-    return { host: h, port: +po || 9000, path: '/ps', secure: false, debug: 1, config: ICE };
+    return { host: h, port: +po || 9000, path: '/ps', secure: false, debug: 1, config: iceConfig || ICE };
   }
-  if (PEER_SERVER.host) return { ...PEER_SERVER, debug: 1, config: ICE };
-  return { debug: 1, config: ICE };
+  if (PEER_SERVER.host) return { ...PEER_SERVER, debug: 1, config: iceConfig || ICE };
+  return { debug: 1, config: iceConfig || ICE };
 }
 
 // Render (בתוכנית חינם) מרדים את השרת אחרי חוסר פעילות; ההתעוררות אורכת עד דקה.
@@ -578,6 +580,7 @@ async function hostRoom() {
   NET.code = makeCode();
   $('#online-msg').textContent = 'יוצר חדר…';
   await warmPeerServer($('#online-msg'));
+  await fetchIce();
   $('#online-msg').textContent = 'יוצר חדר…';
   const peer = new Peer(peerId(NET.code), peerOpts());
   NET.peer = peer;
@@ -677,6 +680,7 @@ async function joinRoom(code) {
   NET.code = code;
   $('#online-msg').textContent = 'מתחבר לחדר ' + code + '…';
   await warmPeerServer($('#online-msg'));
+  await fetchIce();
   $('#online-msg').textContent = 'מתחבר לחדר ' + code + '…';
   const peer = new Peer(peerOpts());
   NET.peer = peer;
@@ -1152,6 +1156,7 @@ document.querySelectorAll('#home-menu .menu-btn[data-panel]').forEach(btn => {
       $('#online-panel').hidden = false;
       $('#online-msg').textContent = '';
       warmPeerServer(null); // מעירים את שרת האיתות מראש, ברקע
+      fetchIce(); // ומושכים מראש גם את פרטי ה-TURN
     } else {
       $('#setup-panel').hidden = false;
       $('#setup-title').textContent = panel === 'bots' ? '🤖 משחק נגד בוטים' : '📱 באותו מכשיר';

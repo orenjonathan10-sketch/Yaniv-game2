@@ -364,7 +364,7 @@ async function declareYaniv(caller) {
 /* ---------- בוטים ---------- */
 async function botTurn(p) {
   await sleep(1100 + rnd(500));
-  if (G.over || G.players[G.turn] !== p || G.phase !== 'turn') return;
+  if (G.over || G.players[G.turn] !== p || G.phase !== 'turn' || !p.bot) return;
   const s = handSum(p.hand);
   if (s <= YANIV_MAX && botCallsYaniv(p, s)) { declareYaniv(G.turn); return; }
 
@@ -526,6 +526,24 @@ function sync() {
    רשת — PeerJS (מארח סמכותי, אורחים שולחים פעולות)
    ============================================================ */
 const NET = { role: null, peer: null, conn: null, code: null };
+// מזהה קבוע למכשיר — מאפשר למארח להחזיר שחקן שהתנתק למושב שלו
+const SID = (() => {
+  let s = localStorage.getItem('yaniv-sid');
+  if (!s) { s = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2); localStorage.setItem('yaniv-sid', s); }
+  return s;
+})();
+// התחברות-מחדש אוטומטית של אורח שנותק באמצע משחק
+const REJOIN = { tries: 0, timer: null };
+function scheduleRejoin() {
+  if (NET.role !== 'client' || !NET.code) return false;
+  if (REJOIN.tries >= 3) { REJOIN.tries = 0; netLost('החיבור למארח אבד'); return true; }
+  REJOIN.tries++;
+  toast(`🔄 החיבור נפל — מתחבר מחדש (${REJOIN.tries}/3)…`);
+  clearTimeout(REJOIN.timer);
+  const code = NET.code;
+  REJOIN.timer = setTimeout(() => joinRoom(code), 1500);
+  return true;
+}
 const LOBBY = { players: [], target: 100, slap: true, started: false };
 const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const makeCode = () => Array.from({ length: 4 }, () => CODE_CHARS[rnd(CODE_CHARS.length)]).join('');
@@ -607,8 +625,26 @@ function setupHostConn(conn) {
     if (msg.t === 'hello') {
       const name = String(msg.name || 'אורח').slice(0, 12) || 'אורח';
       const avatar = AVATARS.includes(msg.avatar) ? msg.avatar : '🤠';
-      if (LOBBY.started || LOBBY.players.length >= 6) { try { conn.send({ t: 'reject', why: LOBBY.started ? 'המשחק כבר התחיל' : 'החדר מלא' }); conn.close(); } catch (e) {} return; }
-      LOBBY.players.push({ name, avatar, bot: false, conn });
+      const sid = typeof msg.sid === 'string' ? msg.sid.slice(0, 40) : '';
+      if (LOBBY.started) {
+        // שחקן חוזר אחרי ניתוק — מזהים לפי sid ומחזירים לו את המושב מהבוט
+        const seat = sid ? G.players.findIndex(p => p.sid === sid) : -1;
+        if (seat >= 0 && !G.players[seat].out) {
+          const p = G.players[seat];
+          try { if (p.conn && p.conn !== conn && p.conn.open) p.conn.close(); } catch (e) {}
+          p.conn = conn;
+          if (p.disconnected) { p.disconnected = false; p.bot = false; fx('toast', { msg: `${p.name} חזר למשחק! 🎉` }); }
+          sync();
+          return;
+        }
+        try { conn.send({ t: 'reject', why: 'המשחק כבר התחיל' }); conn.close(); } catch (e) {}
+        return;
+      }
+      // כבר בלובי עם אותו מזהה (רענון/ניתוק קצר) — מעדכנים חיבור במקום לשכפל
+      const ex = sid ? LOBBY.players.find(p => p.sid === sid) : null;
+      if (ex) { ex.conn = conn; ex.name = name; ex.avatar = avatar; broadcastLobby(); return; }
+      if (LOBBY.players.length >= 6) { try { conn.send({ t: 'reject', why: 'החדר מלא' }); conn.close(); } catch (e) {} return; }
+      LOBBY.players.push({ name, avatar, bot: false, conn, sid });
       conn._seatName = name;
       broadcastLobby();
     } else if (msg.t === 'act') {
@@ -633,7 +669,7 @@ function hostDropConn(conn) {
   p.disconnected = true;
   p.bot = true; // בוט ממשיך במקומו
   p.conn = null;
-  fx('toast', { msg: `${p.name} התנתק — בוט ממשיך במקומו 🤖` });
+  fx('toast', { msg: `${p.name} התנתק — בוט ממשיך במקומו עד שיחזור 🤖` });
   if (!G.over) {
     if (G.phase === 'slap' && G.slapFor === seat) applySlap(seat, false);
     else if (G.phase === 'turn' && G.turn === seat) botTurn(p).catch(console.error);
@@ -660,7 +696,7 @@ function startOnlineGame() {
   LOBBY.started = true;
   GAMEMODE = 'online';
   const players = LOBBY.players.map(p => ({
-    name: p.name, avatar: p.avatar, bot: p.bot, conn: p.conn || null,
+    name: p.name, avatar: p.avatar, bot: p.bot, conn: p.conn || null, sid: p.sid || '',
     hand: [], score: 0, out: false, disconnected: false,
   }));
   startGame({ players, target: LOBBY.target, slap: LOBBY.slap, diff: 'hard' });
@@ -695,19 +731,24 @@ async function joinRoom(code) {
     // אם תוך 25 שניות לא נפתח ערוץ למארח — מדווחים עם מצב ה-ICE במקום להיתקע
     const joinTimer = setTimeout(() => {
       if (!joined && NET.conn === conn && !conn.open) {
+        if (REJOIN.tries && scheduleRejoin()) return;
         netLost('לא הצלחנו להתחבר למארח' + iceInfo(conn));
       }
     }, 25000);
-    conn.on('open', () => { clearTimeout(joinTimer); conn.send({ t: 'hello', name: myName(), avatar: myAvatar() }); });
+    conn.on('open', () => { clearTimeout(joinTimer); conn.send({ t: 'hello', name: myName(), avatar: myAvatar(), sid: SID }); });
     conn.on('data', msg => {
       if (!msg || typeof msg !== 'object') return;
       if (msg.t === 'lobby') {
         joined = true;
+        REJOIN.tries = 0;
         GAMEMODE = 'online';
         UI.lastFxSeq = 0; UI.lastRound = 0; UI.selected.clear();
         $('#online-msg').textContent = '';
         showLobby(msg);
       } else if (msg.t === 'state') {
+        joined = true;
+        REJOIN.tries = 0;
+        GAMEMODE = 'online';
         if ($('#scr-game').classList.contains('active') === false) showScreen('game');
         $('#tb-target').textContent = 'עד ' + msg.v.target;
         applyView(msg.v);
@@ -718,14 +759,24 @@ async function joinRoom(code) {
         netLost('המארח סגר את החדר');
       }
     });
-    conn.on('close', () => { clearTimeout(joinTimer); if (joined) netLost('החיבור למארח נותק'); else $('#online-msg').textContent = 'החיבור למארח נסגר' + iceInfo(conn) + ' — נסו שוב'; });
-    conn.on('error', e => { clearTimeout(joinTimer); netLost('שגיאת חיבור: ' + ((e && e.type) || '') + iceInfo(conn)); });
+    conn.on('close', () => {
+      clearTimeout(joinTimer);
+      if ((joined || REJOIN.tries) && scheduleRejoin()) return;
+      if (joined) netLost('החיבור למארח נותק');
+      else $('#online-msg').textContent = 'החיבור למארח נסגר' + iceInfo(conn) + ' — נסו שוב';
+    });
+    conn.on('error', e => {
+      clearTimeout(joinTimer);
+      if ((joined || REJOIN.tries) && scheduleRejoin()) return;
+      netLost('שגיאת חיבור: ' + ((e && e.type) || '') + iceInfo(conn));
+    });
   };
   peer.on('open', tryConnect);
   peer.on('error', e => {
     if (e.type === 'peer-unavailable') {
       // ייתכן שהמארח בדיוק חוזר מרקע ונרשם מחדש — מנסים שוב פעמיים
       if (attempts < 3 && NET.peer === peer) { setTimeout(tryConnect, 2500); return; }
+      if (REJOIN.tries && scheduleRejoin()) return;
       $('#online-msg').textContent = 'חדר ' + code + ' לא נמצא — ודאו שהקוד נכון ושהמשחק פתוח אצל המארח';
     } else {
       $('#online-msg').textContent = 'שגיאת רשת: ' + (e.type || '');
@@ -735,12 +786,14 @@ async function joinRoom(code) {
   peer.on('disconnected', () => { if (NET.peer === peer && !peer.destroyed) peer.reconnect(); });
 }
 
-// חזרה למשחק אחרי מעבר לאפליקציה אחרת — מחדשים את החיבור לשרת האיתות אם נפל
+// חזרה למשחק אחרי מעבר לאפליקציה אחרת — מחדשים את החיבור לשרת האיתות אם נפל,
+// ואורח שהחיבור שלו למארח מת חוזר אוטומטית למושב שלו
 document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
   const p = NET.peer;
-  if (document.visibilityState === 'visible' && p && !p.destroyed && p.disconnected) {
-    try { p.reconnect(); } catch (e) {}
-  }
+  if (p && !p.destroyed && p.disconnected) { try { p.reconnect(); } catch (e) {} }
+  if (NET.role === 'client' && GAMEMODE === 'online' && NET.code && $('#net-ovl').hidden &&
+      (!NET.conn || !NET.conn.open)) scheduleRejoin();
 });
 
 function netLost(why) {
@@ -1210,6 +1263,7 @@ $('#btn-join').addEventListener('click', () => {
   ac();
   const code = $('#inp-code').value.trim().toUpperCase();
   if (code.length !== 4) { $('#online-msg').textContent = 'הקוד הוא 4 תווים'; return; }
+  REJOIN.tries = 0;
   joinRoom(code);
 });
 $('#inp-code').addEventListener('keydown', e => { if (e.key === 'Enter') $('#btn-join').click(); });

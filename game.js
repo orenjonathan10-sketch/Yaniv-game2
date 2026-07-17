@@ -556,6 +556,9 @@ async function hostRoom() {
     $('#online-msg').textContent = 'שגיאת חיבור: ' + (e.type || e.message || e);
     cleanupNet();
   });
+  // מעבר לאפליקציה אחרת (למשל לשתף קוד בוואטסאפ) מנתק מהשרת והחדר נעלם —
+  // מתחברים מחדש אוטומטית באותו מזהה ברגע שהחיבור נופל
+  peer.on('disconnected', () => { if (NET.peer === peer && !peer.destroyed) peer.reconnect(); });
 }
 
 function setupHostConn(conn) {
@@ -664,7 +667,16 @@ async function joinRoom(code) {
     else $('#online-msg').textContent = 'שגיאת רשת: ' + (e.type || '');
     cleanupNet();
   });
+  peer.on('disconnected', () => { if (NET.peer === peer && !peer.destroyed) peer.reconnect(); });
 }
+
+// חזרה למשחק אחרי מעבר לאפליקציה אחרת — מחדשים את החיבור לשרת האיתות אם נפל
+document.addEventListener('visibilitychange', () => {
+  const p = NET.peer;
+  if (document.visibilityState === 'visible' && p && !p.destroyed && p.disconnected) {
+    try { p.reconnect(); } catch (e) {}
+  }
+});
 
 function netLost(why) {
   if (!NET.role) return;

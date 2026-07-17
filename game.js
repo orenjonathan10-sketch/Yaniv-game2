@@ -633,6 +633,7 @@ function setupHostConn(conn) {
           const p = G.players[seat];
           try { if (p.conn && p.conn !== conn && p.conn.open) p.conn.close(); } catch (e) {}
           p.conn = conn;
+          clearTimeout(p.graceTimer);
           if (p.disconnected) { p.disconnected = false; p.bot = false; fx('toast', { msg: `${p.name} חזר למשחק! 🎉` }); }
           sync();
           return;
@@ -656,6 +657,8 @@ function setupHostConn(conn) {
   conn.on('error', () => hostDropConn(conn));
 }
 
+const GRACE_SECS = 30; // כמה זמן מחכים לשחקן שהתנתק לפני שבוט נכנס במקומו
+
 function hostDropConn(conn) {
   if (!LOBBY.started) {
     const i = LOBBY.players.findIndex(p => p.conn === conn);
@@ -667,12 +670,21 @@ function hostDropConn(conn) {
   const p = G.players[seat];
   if (p.disconnected) return;
   p.disconnected = true;
-  p.bot = true; // בוט ממשיך במקומו
   p.conn = null;
-  fx('toast', { msg: `${p.name} התנתק — בוט ממשיך במקומו עד שיחזור 🤖` });
+  fx('toast', { msg: `${p.name} התנתק — ממתינים ${GRACE_SECS} שניות שיחזור ⏳` });
+  clearTimeout(p.graceTimer);
+  p.graceTimer = setTimeout(() => {
+    if (G.players[seat] !== p || !p.disconnected || G.over) return;
+    p.bot = true;
+    fx('toast', { msg: `בוט ממשיך במקומו של ${p.name} 🤖` });
+    if (G.phase === 'turn' && G.turn === seat) {
+      clearTimeout(G.turnTimer);
+      G.turnDeadline = 0;
+      botTurn(p).catch(console.error);
+    } else sync();
+  }, GRACE_SECS * 1000);
   if (!G.over) {
     if (G.phase === 'slap' && G.slapFor === seat) applySlap(seat, false);
-    else if (G.phase === 'turn' && G.turn === seat) botTurn(p).catch(console.error);
     else sync();
   }
 }
@@ -945,7 +957,7 @@ function renderGame(v, dealAnim = false) {
     el.className = 'oppo' + (i === v.turn && !v.over ? ' active' : '') + (p.out ? ' out' : '');
     el.innerHTML = `
       <div class="oppo-ava">${p.avatar}</div>
-      <div class="oppo-name">${escapeHtml(p.name)}${p.disc ? ' 🤖' : ''}</div>
+      <div class="oppo-name">${escapeHtml(p.name)}${p.disc ? (p.bot ? ' 🤖' : ' ⏳') : ''}</div>
       <div class="oppo-cards">${'<div class="mini-back"></div>'.repeat(Math.min(p.n, 8))}</div>
       <div class="oppo-score">${p.score}</div>`;
     opBox.appendChild(el);

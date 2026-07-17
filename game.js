@@ -508,7 +508,7 @@ const makeCode = () => Array.from({ length: 4 }, () => CODE_CHARS[rnd(CODE_CHARS
 const peerId = code => 'yaniv-heb-' + code;
 
 // שרת איתות משלנו (Render). כשה-host ריק — נופלים לענן הציבורי של PeerJS.
-const PEER_SERVER = { host: '', port: 443, path: '/ps', secure: true };
+const PEER_SERVER = { host: 'yaniv-peer.onrender.com', port: 443, path: '/ps', secure: true };
 
 function peerOpts() {
   const m = location.search.match(/[?&]ps=([^&]+)/); // עקיפה לבדיקות: ?ps=cloud או ?ps=host:port

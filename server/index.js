@@ -16,17 +16,26 @@ app.use('/ps', ExpressPeerServer(server, {
 
 app.get('/', (req, res) => res.send('ok'));
 
-// פרטי ICE (STUN+TURN) זמניים — הלקוח מושך אותם לפני כל התחברות
+// פרטי ICE (STUN+TURN) זמניים — הלקוח מושך אותם לפני כל התחברות.
+// מוגבל למקורות של המשחק בלבד, כדי שאיש לא ינצל את מכסת הממסר.
+const ALLOWED_ORIGINS = [
+  'https://yaniv.orenteam.com',
+  'https://orenjonathan10-sketch.github.io',
+];
+
 app.get('/turn', async (req, res) => {
-  res.set('Access-Control-Allow-Origin', '*');
   const keyId = process.env.CF_TURN_KEY_ID;
   const token = process.env.CF_TURN_API_TOKEN;
+  if (req.query.check) return res.json({ configured: !!(keyId && token) });
+  const origin = req.get('origin') || '';
+  if (!ALLOWED_ORIGINS.includes(origin)) return res.status(403).json({ error: 'forbidden' });
+  res.set('Access-Control-Allow-Origin', origin);
   if (!keyId || !token) return res.status(503).json({ error: 'not-configured' });
   try {
     const r = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${keyId}/credentials/generate-ice-servers`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ttl: 86400 }),
+      body: JSON.stringify({ ttl: 43200 }), // תוקף 12 שעות
     });
     res.status(r.status).json(await r.json());
   } catch (e) {

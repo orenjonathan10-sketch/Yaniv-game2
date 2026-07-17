@@ -33,12 +33,12 @@ function blip(freq, dur = .09, type = 'triangle', gain = .13, delay = 0) {
 /* ---------- מוזיקת אווירה — חוף רגוע, מיוצרת ב-WebAudio בלי קבצים ---------- */
 const MUSIC = { on: false, nodes: null, timer: null, bar: 0 };
 const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
-// C-maj7 → A-min7 → F-maj7 → G-7, עם סולם פנטטוני לפריטות
+// C-maj7 → A-min7 → F-maj7 → G-7 בקילוח שרמקול טלפון משמיע היטב, פנטטוני לפריטות
 const PROG = [
-  { pad: [48, 55, 64, 71], pent: [72, 74, 76, 79, 81, 84] },
-  { pad: [45, 52, 60, 67], pent: [69, 72, 74, 76, 79, 81] },
-  { pad: [41, 48, 57, 65], pent: [65, 69, 72, 74, 77, 81] },
-  { pad: [43, 50, 59, 65], pent: [67, 71, 74, 76, 79, 83] },
+  { pad: [60, 64, 67, 71], pent: [72, 74, 76, 79, 81, 84] },
+  { pad: [57, 60, 64, 67], pent: [69, 72, 74, 76, 79, 81] },
+  { pad: [53, 60, 64, 69], pent: [65, 69, 72, 74, 77, 81] },
+  { pad: [55, 59, 62, 65], pent: [67, 71, 74, 76, 79, 83] },
 ];
 const BAR_SECS = 4;
 
@@ -49,24 +49,29 @@ function musicBar() {
   const { master } = MUSIC.nodes;
   const ch = PROG[MUSIC.bar % PROG.length];
   MUSIC.bar++;
-  // כרית אקורד רכה
+  // כרית אקורד — שני מתנדים מנותקים קלות לכל תו, דרך פילטר רך
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass'; lp.frequency.value = 1500; lp.Q.value = 0.4;
+  lp.connect(master);
   for (const m of ch.pad) {
-    const o = ctx.createOscillator(), g = ctx.createGain();
-    o.type = 'sine'; o.frequency.value = mtof(m);
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.linearRampToValueAtTime(0.045, t + 1.2);
-    g.gain.linearRampToValueAtTime(0.03, t + BAR_SECS - 0.6);
-    g.gain.linearRampToValueAtTime(0.0001, t + BAR_SECS + 0.4);
-    o.connect(g).connect(master);
-    o.start(t); o.stop(t + BAR_SECS + 0.6);
+    for (const det of [-5, 5]) {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'triangle'; o.frequency.value = mtof(m); o.detune.value = det;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(0.035, t + 1.1);
+      g.gain.linearRampToValueAtTime(0.026, t + BAR_SECS - 0.5);
+      g.gain.linearRampToValueAtTime(0.0001, t + BAR_SECS + 0.5);
+      o.connect(g).connect(lp);
+      o.start(t); o.stop(t + BAR_SECS + 0.7);
+    }
   }
   // פריטות עדינות אקראיות מהפנטטוני
-  const nPl = 2 + rnd(3);
+  const nPl = 1 + rnd(3);
   for (let i = 0; i < nPl; i++) {
     const at = t + 0.4 + Math.random() * (BAR_SECS - 1.2);
     const o = ctx.createOscillator(), g = ctx.createGain();
     o.type = 'triangle'; o.frequency.value = mtof(ch.pent[rnd(ch.pent.length)]);
-    g.gain.setValueAtTime(0.07, at);
+    g.gain.setValueAtTime(0.05, at);
     g.gain.exponentialRampToValueAtTime(0.0001, at + 0.9);
     o.connect(g).connect(master);
     o.start(at); o.stop(at + 1);

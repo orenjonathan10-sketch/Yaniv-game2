@@ -30,6 +30,92 @@ function blip(freq, dur = .09, type = 'triangle', gain = .13, delay = 0) {
   o.connect(g).connect(ctx.destination);
   o.start(t); o.stop(t + dur + .02);
 }
+/* ---------- מוזיקת אווירה — חוף רגוע, מיוצרת ב-WebAudio בלי קבצים ---------- */
+const MUSIC = { on: false, nodes: null, timer: null, bar: 0 };
+const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+// C-maj7 → A-min7 → F-maj7 → G-7, עם סולם פנטטוני לפריטות
+const PROG = [
+  { pad: [48, 55, 64, 71], pent: [72, 74, 76, 79, 81, 84] },
+  { pad: [45, 52, 60, 67], pent: [69, 72, 74, 76, 79, 81] },
+  { pad: [41, 48, 57, 65], pent: [65, 69, 72, 74, 77, 81] },
+  { pad: [43, 50, 59, 65], pent: [67, 71, 74, 76, 79, 83] },
+];
+const BAR_SECS = 4;
+
+function musicBar() {
+  if (!MUSIC.on || muted) return;
+  const ctx = ac(); if (!ctx) return;
+  const t = ctx.currentTime + 0.05;
+  const { master } = MUSIC.nodes;
+  const ch = PROG[MUSIC.bar % PROG.length];
+  MUSIC.bar++;
+  // כרית אקורד רכה
+  for (const m of ch.pad) {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'sine'; o.frequency.value = mtof(m);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.045, t + 1.2);
+    g.gain.linearRampToValueAtTime(0.03, t + BAR_SECS - 0.6);
+    g.gain.linearRampToValueAtTime(0.0001, t + BAR_SECS + 0.4);
+    o.connect(g).connect(master);
+    o.start(t); o.stop(t + BAR_SECS + 0.6);
+  }
+  // פריטות עדינות אקראיות מהפנטטוני
+  const nPl = 2 + rnd(3);
+  for (let i = 0; i < nPl; i++) {
+    const at = t + 0.4 + Math.random() * (BAR_SECS - 1.2);
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'triangle'; o.frequency.value = mtof(ch.pent[rnd(ch.pent.length)]);
+    g.gain.setValueAtTime(0.07, at);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + 0.9);
+    o.connect(g).connect(master);
+    o.start(at); o.stop(at + 1);
+  }
+  MUSIC.timer = setTimeout(musicBar, BAR_SECS * 1000);
+}
+
+function startMusic() {
+  if (MUSIC.on || muted) return;
+  const ctx = ac(); if (!ctx) return;
+  MUSIC.on = true;
+  const master = ctx.createGain();
+  master.gain.setValueAtTime(0.0001, ctx.currentTime);
+  master.gain.linearRampToValueAtTime(1, ctx.currentTime + 2.5);
+  master.connect(ctx.destination);
+  // גלים: רעש מסונן שנושם לאט
+  const buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  const noise = ctx.createBufferSource(); noise.buffer = buf; noise.loop = true;
+  const nf = ctx.createBiquadFilter(); nf.type = 'lowpass'; nf.frequency.value = 480;
+  const ng = ctx.createGain(); ng.gain.value = 0.045;
+  const lfo = ctx.createOscillator(); lfo.frequency.value = 0.08;
+  const lfoG = ctx.createGain(); lfoG.gain.value = 0.03;
+  lfo.connect(lfoG).connect(ng.gain);
+  noise.connect(nf).connect(ng).connect(master);
+  noise.start(); lfo.start();
+  MUSIC.nodes = { master, noise, lfo };
+  musicBar();
+}
+
+function stopMusic() {
+  if (!MUSIC.on) return;
+  MUSIC.on = false;
+  clearTimeout(MUSIC.timer);
+  const n = MUSIC.nodes;
+  MUSIC.nodes = null;
+  if (n) {
+    try {
+      const ctx = ac();
+      n.master.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.5);
+      setTimeout(() => { try { n.noise.stop(); n.lfo.stop(); n.master.disconnect(); } catch (e) {} }, 700);
+    } catch (e) {}
+  }
+}
+
+// דפדפנים מתירים סאונד רק אחרי מגע — מתחילים בנגיעה הראשונה
+document.addEventListener('pointerdown', () => startMusic());
+
 const snd = {
   select() { blip(660, .05, 'sine', .08); },
   throw()  { blip(300, .08); blip(430, .08, 'triangle', .11, .05); },
@@ -1352,6 +1438,7 @@ $('#btn-sound').addEventListener('click', () => {
   muted = !muted;
   localStorage.setItem('yaniv-muted', muted ? '1' : '0');
   $('#btn-sound').textContent = muted ? '🔇' : '🔊';
+  if (muted) stopMusic(); else startMusic();
 });
 $('#btn-sound').textContent = muted ? '🔇' : '🔊';
 

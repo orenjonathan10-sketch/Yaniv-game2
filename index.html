@@ -109,7 +109,7 @@
         <button class="btn-plain btn-back">חזרה</button>
       </div>
 
-      <p class="home-foot">משחק חינמי · בלי הרשמה · שמרו למסך הבית 📱 · v16</p>
+      <p class="home-foot">משחק חינמי · בלי הרשמה · שמרו למסך הבית 📱 · v17</p>
     </div>
   </section>
 
@@ -158,6 +158,7 @@
         <span id="tb-target">עד 100</span>
       </div>
       <div class="tb-left">
+        <button id="btn-chat" class="tb-btn" title="צ'אט">💬</button>
         <button id="btn-scores" class="tb-btn" title="טבלת ניקוד">🏆</button>
         <button id="btn-sound" class="tb-btn" title="צליל">🔊</button>
       </div>
@@ -225,6 +226,26 @@
         <h2 id="go-title">אתה המנצח! 🏆</h2>
         <div id="go-table" class="re-rows"></div>
         <button id="go-again" class="btn-gold">סיום 🎴</button>
+      </div>
+    </div>
+
+    <!-- צ'אט -->
+    <div id="chat-ovl" class="overlay" hidden>
+      <div class="panel chat-panel">
+        <h2>💬 צ'אט</h2>
+        <div id="chat-log" class="chat-log"></div>
+        <div id="chat-quick" class="chat-quick">
+          <button>יניב בקרוב! 😏</button>
+          <button>חחח 😂</button>
+          <button>יאללה, תזרוק כבר ⏱</button>
+          <button>מזל של מתחילים 🍀</button>
+          <button>👏👏</button>
+        </div>
+        <div class="chat-row">
+          <input id="chat-input" class="name-input" type="text" maxlength="80" placeholder="כתבו הודעה…" autocomplete="off" />
+          <button id="btn-chat-send" class="btn-throw">שלח</button>
+        </div>
+        <button id="btn-chat-close" class="btn-plain">סגור</button>
       </div>
     </div>
 

@@ -438,6 +438,44 @@ button { font-family: inherit; cursor: pointer; border: none; }
   animation: yanivPulse .8s infinite;
 }
 
+/* --- צ'אט --- */
+.tb-btn { position: relative; }
+.tb-btn.unread::after {
+  content: ''; position: absolute; top: 4px; left: 4px;
+  width: 9px; height: 9px; border-radius: 50%;
+  background: #ff5a4e; border: 1.5px solid #fff;
+}
+.chat-panel { gap: 10px; }
+.chat-log {
+  display: flex; flex-direction: column; gap: 6px;
+  min-height: 120px; max-height: 38vh; overflow-y: auto;
+  padding: 4px 2px;
+}
+.chat-log:empty::before {
+  content: 'עוד אין הודעות — תגידו שלום 👋';
+  color: #9fc9db; font-size: 13px; text-align: center; margin: auto;
+}
+.ch-b {
+  align-self: flex-start; max-width: 85%;
+  background: rgba(255, 255, 255, .1);
+  border-radius: 14px 14px 14px 4px;
+  padding: 7px 12px; font-size: 14px; line-height: 1.35;
+}
+.ch-b.me {
+  align-self: flex-end;
+  background: rgba(255, 216, 61, .18);
+  border-radius: 14px 14px 4px 14px;
+}
+.ch-b b { display: block; font-size: 11.5px; color: var(--sun); margin-bottom: 2px; }
+.chat-quick { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.chat-quick button {
+  background: rgba(255, 255, 255, .12); color: #fff;
+  border-radius: 999px; padding: 7px 12px; font-size: 13px;
+}
+.chat-row { display: flex; gap: 8px; }
+.chat-row .name-input { border-radius: 14px; box-shadow: none; }
+.chat-row .btn-throw { padding: 11px 18px; flex-shrink: 0; }
+
 /* --- שכבות-על --- */
 .overlay {
   position: fixed; inset: 0; z-index: 40;

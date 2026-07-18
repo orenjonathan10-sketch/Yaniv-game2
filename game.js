@@ -668,6 +668,13 @@ function setupHostConn(conn) {
     } else if (msg.t === 'act') {
       const seat = G.players.findIndex(p => p.conn === conn);
       if (seat >= 0) applyAction(seat, msg.a);
+    } else if (msg.t === 'chat') {
+      const src = (G.players || []).find(x => x.conn === conn) || LOBBY.players.find(x => x.conn === conn);
+      const text = String(msg.text || '').slice(0, 80).trim();
+      if (!src || !text) return;
+      addChatMsg({ name: src.name, avatar: src.avatar, text });
+      broadcastChat({ name: src.name, avatar: src.avatar, text }, conn);
+      botChatReply(text);
     }
   });
   conn.on('close', () => hostDropConn(conn));
@@ -781,6 +788,8 @@ async function joinRoom(code) {
         if ($('#scr-game').classList.contains('active') === false) showScreen('game');
         $('#tb-target').textContent = 'עד ' + msg.v.target;
         applyView(msg.v);
+      } else if (msg.t === 'chat') {
+        addChatMsg({ name: String(msg.name || '').slice(0, 12), avatar: AVATARS.includes(msg.avatar) ? msg.avatar : '🤖', text: String(msg.text || '').slice(0, 80) });
       } else if (msg.t === 'reject') {
         $('#online-msg').textContent = msg.why || 'אי אפשר להצטרף';
         cleanupNet();
@@ -823,6 +832,105 @@ document.addEventListener('visibilitychange', () => {
   if (p && !p.destroyed && p.disconnected) { try { p.reconnect(); } catch (e) {} }
   if (NET.role === 'client' && GAMEMODE === 'online' && NET.code && $('#net-ovl').hidden &&
       (!NET.conn || !NET.conn.open)) scheduleRejoin();
+});
+
+/* ============================================================
+   צ'אט — בין שחקנים אונליין, והבוטים עונים
+   ============================================================ */
+const CHAT = [];
+
+const BOT_CHAT = {
+  yaniv: ['אל תחלום על יניב 😤', 'רגע רגע, אני לפניך!', 'שים לב שלא תחטוף אסף 😏', 'נראה אותך!'],
+  laugh: ['חחחח 😂', 'נו באמת חח', '🤣🤣', 'צוחק מי שצוחק אחרון 😏'],
+  greet: ['היי! 👋', 'שלום שלום 🌴', 'מה קורה! מוכנים להפסיד?', 'אהלן! ☀️'],
+  good: ['כל הכבוד! 👏', 'יפה מאוד!', 'וואו 👏', 'משחק יפה, עדיין תפסיד 😏'],
+  angry: ['תירגע חביבי 🧘', 'הכול חלק מהמשחק 😎', 'אל תכעס, זה רק קלפים 🃏'],
+  generic: [
+    'בוא נראה אותך 😎', 'אני מתרכז במשחק 🤫', 'הקלפים שלי מעולים 😏',
+    'איזה חום בחוף הזה ☀️', 'עוד סיבוב ואני מנצח', '🌊🌊', 'ששש… חושב פה 🤔',
+    'מישהו הזמין קוקטייל? 🍹', 'הים רגוע, אני לא 😤',
+  ],
+};
+
+function renderChat() {
+  const log = $('#chat-log');
+  log.innerHTML = CHAT.map(e =>
+    `<div class="ch-b${e.mine ? ' me' : ''}"><b>${e.avatar} ${escapeHtml(e.name)}</b>${escapeHtml(e.text)}</div>`
+  ).join('');
+  log.scrollTop = log.scrollHeight;
+}
+
+function addChatMsg(e) {
+  CHAT.push(e);
+  if (CHAT.length > 60) CHAT.shift();
+  renderChat();
+  if ($('#chat-ovl').hidden && !e.mine) {
+    toast(`${e.avatar} ${e.name}: ${e.text}`);
+    $('#btn-chat').classList.add('unread');
+  }
+}
+
+function broadcastChat(entry, exceptConn) {
+  const src = LOBBY.started ? (G.players || []) : LOBBY.players;
+  for (const p of src) {
+    const c = p.conn;
+    if (c && c.open && c !== exceptConn) { try { c.send({ t: 'chat', name: entry.name, avatar: entry.avatar, text: entry.text }); } catch (e) {} }
+  }
+}
+
+function sendChat(text) {
+  text = String(text || '').slice(0, 80).trim();
+  if (!text) return;
+  addChatMsg({ name: myName(), avatar: myAvatar(), text, mine: true });
+  if (NET.role === 'client') { try { NET.conn.send({ t: 'chat', text }); } catch (e) {} }
+  else if (NET.role === 'host') { broadcastChat({ name: myName(), avatar: myAvatar(), text }, null); botChatReply(text); }
+  else botChatReply(text);
+}
+
+function botSay(bot, text) {
+  if (bot.out || !bot.bot) return;
+  const entry = { name: bot.name, avatar: bot.avatar, text };
+  addChatMsg(entry);
+  if (NET.role === 'host') broadcastChat(entry, null);
+}
+
+function botChatReply(text) {
+  const bots = (G.players || []).filter(p => p.bot && !p.out && !p.disconnected);
+  if (!bots.length || G.over) return;
+  let pool;
+  if (/יניב|אסף/.test(text)) pool = BOT_CHAT.yaniv;
+  else if (/חח|😂|🤣|לול|lol/i.test(text)) pool = BOT_CHAT.laugh;
+  else if (/היי|שלום|אהלן|בוקר|ערב|מה נשמע|מה קורה/.test(text)) pool = BOT_CHAT.greet;
+  else if (/כל הכבוד|יפה|מעולה|אלוף|תותח|וואו/.test(text)) pool = BOT_CHAT.good;
+  else if (/😡|😠|נמאס|די כבר|עצבים/.test(text)) pool = BOT_CHAT.angry;
+  else pool = BOT_CHAT.generic;
+  const bot = bots[rnd(bots.length)];
+  const options = [...pool];
+  if ((bot.hand || []).length && handSum(bot.hand) <= 10) options.push('אני ממש קרוב ליניב 😏', 'עוד רגע אני סוגר את הסיבוב…');
+  const me = G.players && G.players[0];
+  if (me && (me.hand || []).length >= 6) options.push('כמה קלפים אספת שם?! 😂');
+  setTimeout(() => botSay(bot, options[rnd(options.length)]), 900 + rnd(2200));
+  if (bots.length > 1 && rnd(3) === 0) {
+    const others = bots.filter(b => b !== bot);
+    const other = others[rnd(others.length)];
+    setTimeout(() => botSay(other, BOT_CHAT.generic[rnd(BOT_CHAT.generic.length)]), 3500 + rnd(2200));
+  }
+}
+
+$('#btn-chat').addEventListener('click', () => {
+  $('#chat-ovl').hidden = false;
+  $('#btn-chat').classList.remove('unread');
+  renderChat();
+});
+$('#btn-chat-close').addEventListener('click', () => { $('#chat-ovl').hidden = true; });
+$('#btn-chat-send').addEventListener('click', () => {
+  const inp = $('#chat-input');
+  sendChat(inp.value);
+  inp.value = '';
+});
+$('#chat-input').addEventListener('keydown', e => { if (e.key === 'Enter') $('#btn-chat-send').click(); });
+document.querySelectorAll('#chat-quick button').forEach(b => {
+  b.addEventListener('click', () => sendChat(b.textContent));
 });
 
 function netLost(why) {

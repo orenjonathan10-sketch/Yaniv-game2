@@ -567,16 +567,18 @@ const makeCode = () => Array.from({ length: 4 }, () => CODE_CHARS[rnd(CODE_CHARS
 const peerId = code => 'yaniv-heb-' + code;
 
 // שרת איתות משלנו (Render). כשה-host ריק — נופלים לענן הציבורי של PeerJS.
-const PEER_SERVER = { host: 'yaniv-peer.onrender.com', port: 443, path: '/ps', secure: true };
+const PEER_SERVER = { host: '', port: 443, path: '/ps', secure: true };
+// כתובת ה-Worker שמנפיק פרטי TURN של Cloudflare (ריק = בלי ממסר)
+const TURN_URL = '';
 
 // STUN בסיסי כגיבוי; פרטי TURN אמיתיים (Cloudflare) נמשכים מהשרת ב-/turn.
 // בלי TURN, חיבור בין רשתות סלולריות/VPN (CGNAT) נכשל ברוב המקרים.
 const ICE = { iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }] };
 let iceConfig = null;
 async function fetchIce() {
-  if (iceConfig || !PEER_SERVER.host) return;
+  if (iceConfig || !TURN_URL) return;
   try {
-    const r = await fetch('https://' + PEER_SERVER.host + '/turn', { cache: 'no-store' });
+    const r = await fetch(TURN_URL, { cache: 'no-store' });
     if (r.ok) {
       const d = await r.json();
       if (d && d.iceServers) iceConfig = { iceServers: [].concat(d.iceServers) };

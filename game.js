@@ -569,7 +569,7 @@ const peerId = code => 'yaniv-heb-' + code;
 // שרת איתות משלנו (Render). כשה-host ריק — נופלים לענן הציבורי של PeerJS.
 const PEER_SERVER = { host: '', port: 443, path: '/ps', secure: true };
 // כתובת ה-Worker שמנפיק פרטי TURN של Cloudflare (ריק = בלי ממסר)
-const TURN_URL = '';
+const TURN_URL = 'https://yaniv-turn.family-oren123.workers.dev/turn';
 
 // STUN בסיסי כגיבוי; פרטי TURN אמיתיים (Cloudflare) נמשכים מהשרת ב-/turn.
 // בלי TURN, חיבור בין רשתות סלולריות/VPN (CGNAT) נכשל ברוב המקרים.
